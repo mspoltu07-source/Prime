@@ -438,7 +438,7 @@
         </div>
     </footer>
 
-    <!-- ========== STANDALONE CHATBOT (injects its own HTML/CSS/JS) ========== -->
+    <!-- ========== STANDALONE CHATBOT (FIXED WEBHOOK HANDLING) ========== -->
     <div id="prime-chat-container"></div>
 
     <script>
@@ -746,6 +746,7 @@
                 if (typing) typing.remove();
             }
 
+            // FIXED: Robust webhook response handling
             async function sendToWebhook(userMessage) {
                 try {
                     showTyping();
@@ -759,11 +760,26 @@
                             history: messages.slice(-10)
                         })
                     });
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    const data = await response.json();
-                    const botReply = data.reply || data.text || data.message || JSON.stringify(data);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error ${response.status}`);
+                    }
+
+                    // Try to parse as JSON first
+                    let botReply = "Thank you for your message. Our team will get back to you shortly."; // fallback
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const data = await response.json();
+                        // Check common fields used by webhooks
+                        botReply = data.reply || data.text || data.message || data.response || JSON.stringify(data);
+                    } else {
+                        // If not JSON, get plain text
+                        botReply = await response.text();
+                    }
+
                     addMessage(botReply, 'bot');
                 } catch (error) {
+                    console.error('Webhook error:', error);
                     addMessage('I apologize, but I’m having trouble connecting. Please try again later or call our concierge.', 'bot');
                 } finally {
                     hideTyping();
